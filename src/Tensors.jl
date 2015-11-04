@@ -283,25 +283,26 @@ function matchmodes(M1::Vector{Mode},M2::Vector{Mode})
     return M,K1,K2,N
 end
 
-for (S,T) in [(:Row,:Col),(:Col,:Row)]
-    @eval begin
-        function $(symbol("drop"*string(S)))(M::Vector{Mode},K::Vector{Mode})
-            M = copy(M)
-            for k in K
-                if isa(mlabel(k), $T)
-                    l = mlabel(k).mlabel
-                    i = findfirst(m -> mlabel(m) == $S(l), M)
-                    if i > 0 M[i] = Mode(l, msize(M[i])) end
-                end
-            end
-            return M
+function mergemodes(M, K1, K2, N)
+    M = copy(M)
+    N = copy(N)
+    for (k1,k2) in zip(K1,K2)
+        if isa(mlabel(k1), Col) && !isa(mlabel(k2), Row)
+            l = mlabel(k1).mlabel
+            i = findfirst(m -> mlabel(m) == Row(l), M)
+            if i > 0 M[i] = Mode(l, msize(M[i])) end
+        elseif !isa(mlabel(k1), Col) && isa(mlabel(k2), Row)
+            l = mlabel(k2).mlabel
+            i = findfirst(m -> mlabel(m) == Row(l), N)
+            if i > 0 N[i] = Mode(l, msize(N[i])) end
         end
     end
+    return [M;N]
 end
 
 function *(t1::Tensor, t2::Tensor)
     M,K1,K2,N = matchmodes(t1.modes,t2.modes)
-    return Tensor([dropRow(M,K1);dropCol(N,K2)], vec(t1[mlabel(M),mlabel(K1)] * t2[mlabel(K2),mlabel(N)]))
+    return Tensor(mergemodes(M,K1,K2,N), vec(t1[mlabel(M),mlabel(K1)] * t2[mlabel(K2),mlabel(N)]))
 end
 
 
