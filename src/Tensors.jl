@@ -214,6 +214,21 @@ function mergem!(t::Tensor, m#=::Dict{Vector, Any}=#)
 end
 
 
+# Transposition and conjugation
+
+Base.conj!(t::Tensor) = (conj!(t.data); return t)
+Base.conj(t::Tensor) = conj!(copy(t))
+function Base.transpose!(t::Tensor)
+    for (i,k) in enumerate(t.modes)
+        if isa(mlabel(k), Row) t.modes[i] = Mode(Col(mlabel(k).mlabel), msize(k))
+        elseif isa(mlabel(k), Col) t.modes[i] = Mode(Row(mlabel(k).mlabel), msize(k))
+        end
+    end
+    return t
+end
+Base.transpose(t::Tensor) = transpose!(copy(t))
+
+
 # Vector arithmetic
 
 for f in (:+,:-)
