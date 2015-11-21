@@ -308,7 +308,7 @@ function mergemodes(M, K1, K2, N)
             if i > 0 M[i] = Mode(l, msize(M[i])) end
         elseif !isa(mlabel(k1), Col) && isa(mlabel(k2), Row)
             l = mlabel(k2).mlabel
-            i = findfirst(m -> mlabel(m) == Row(l), N)
+            i = findfirst(m -> mlabel(m) == Col(l), N)
             if i > 0 N[i] = Mode(l, msize(N[i])) end
         end
     end
