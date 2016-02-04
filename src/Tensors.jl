@@ -91,7 +91,7 @@ pushm(x::Tensor, M::AbstractVector, y::Tensor) = pushm(x,M)*pushm(M,y)
 
 # Basic functions
 
-Base.eltype(t::Tensor) = eltype(t.data)
+Base.eltype{T}(::Type{Tensor{T}}) = T
 Base.length(t::Tensor) = length(t.data)
 Base.ndims(t::Tensor) = length(t.modes)
 Base.size(t::Tensor) = map(msize,t.modes)
