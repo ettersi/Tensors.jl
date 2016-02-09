@@ -2,7 +2,7 @@ module Tensors
 
 export 
     Mode, msize, mlabel, Row, Col, Square, pushm, pushm!, Index, index,
-    Virtual, splitm, splitm!, mergem, mergem!,
+    Virtual, splitm, splitm!, mergem, mergem!, resize,
     Tensor, mode, mlabel, msize,
     empty, init,
     adaptive, fixed
@@ -211,6 +211,11 @@ function mergem!(t::Tensor, m#=::Dict{Vector, Any}=#)
     n = (k = 1; [msize(t.modes[k:(k+=length(K))-1]) for K in keys(m)])
     t.modes = Mode[Mode(k,nk) for (k,nk) in zip(values(m),n)]
     return t
+end
+
+function resize(t::Tensor, n)
+    modes = [Mode(mlabel(k), get(n, mlabel(k), msize(k))) for k in t.modes]
+    return Tensor(modes, vec(reshape(t.data, [nk for nk in size(t)]...)[[1:msize(k) for k in modes]...]))
 end
 
 
