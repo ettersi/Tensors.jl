@@ -5,7 +5,7 @@ export
     Virtual, splitm, splitm!, mergem, mergem!, resize,
     Tensor, mode, mlabel, msize,
     empty, init,
-    adaptive, fixed
+    adaptive, fixed, maxrank
 
 
 # Typedefs
@@ -374,15 +374,15 @@ end
 
 # SVD decomposition
 
-function Base.svd(t::Tensor, k::Any, rank = fixed(maxrank(t,k)))
-    Kc = setdiff(mlabel(t), k)
+function Base.svd(t::Tensor, k::Any, rank = maxrank())
+    Kc = setdiff(mlabel(t), [k])
     F = svdfact(t[Kc,k])
     kk = Mode(k, rank(F[:S]))
     return Tensor([mode(t,Kc); kk], vec(F[:U][:,1:msize(kk)])), 
            Tensor([kk], F[:S][1:msize(kk)]), 
            Tensor([Row(kk);Col(mode(t,k))], vec(F[:Vt][1:msize(kk), :]))
 end
-function Base.svd(t::Tensor, K::AbstractVector, k::Any, rank = fixed(maxrank(t,K)))
+function Base.svd(t::Tensor, K::AbstractVector, k::Any, rank = maxrank())
     Kc = setdiff(mlabel(t), K)
     F = svdfact(t[Kc,K])
     k = Mode(k, rank(F[:S]))
@@ -396,6 +396,7 @@ end
 
 adaptive(eps; rel = true) = (s) -> max(length(s) - searchsortedlast(cumsum(reverse(s).^2), (eps*(rel ? vecnorm(s) : 1))^2),1)
 fixed(r) = (s) -> r
+maxrank() = (s) -> length(s)
 
 
 # Helpers
