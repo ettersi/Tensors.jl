@@ -1,11 +1,13 @@
 module Tensors
 
+using Base.Cartesian
+
 export 
     Mode, msize, mlabel, Row, Col, Square, pushm, pushm!, Index, index,
     Virtual, splitm, splitm!, mergem, mergem!, resize,
     Tensor, mode, mlabel, msize,
     empty, init,
-    adaptive, fixed, maxrank
+    padcat, adaptive, fixed, maxrank
 
 
 # Typedefs
@@ -216,6 +218,54 @@ end
 function resize(t::Tensor, n)
     modes = [Mode(mlabel(k), get(n, mlabel(k), msize(k))) for k in t.modes]
     return Tensor(modes, vec(reshape(t.data, [nk for nk in size(t)]...)[[1:msize(k) for k in modes]...]))
+end
+
+
+# Concatenation and padding (for TN sum)
+
+@generated function padcat_{T,N}(x::Array{T,N}, y::Array{T,N}, extendmode::Vector{Bool})
+    quote
+        z = zeros(T, (collect(size(x)) + extendmode.*collect(size(y)))...)
+
+        stridez_1 = 1; @nexprs $N d->(stridez_{d+1} = stridez_d*size(z, d))
+        stridex_1 = 1; @nexprs $N d->(stridex_{d+1} = stridex_d*size(x, d))
+        stridey_1 = 1; @nexprs $N d->(stridey_{d+1} = stridey_d*size(y, d))
+
+        $(symbol(:offsetz_, N)) = 1
+        $(symbol(:offsetx_, N)) = 1
+        $(symbol(:offsety_, N)) = 1
+
+        @nexprs $N d->(nx_d = extendmode[d] ? size(x,d) : 0)
+
+        @nloops $N i x d->(
+            offsetz_{d-1} = offsetz_d + (i_d-1)*stridez_d;
+            offsetx_{d-1} = offsetx_d + (i_d-1)*stridex_d
+        ) begin
+            @inbounds z[offsetz_0] = x[offsetx_0]
+        end
+
+        @nloops $N i y d->(
+            offsetz_{d-1} = offsetz_d + (nx_d+i_d-1)*stridez_d;
+            offsety_{d-1} = offsety_d + (i_d-1)*stridey_d
+        ) begin
+            @inbounds z[offsetz_0] = y[offsety_0]
+        end
+
+        return z
+    end
+end
+
+function padcat(x::Tensor, y::Tensor, extendmodes)
+    @assert length(extendmodes) > 0 "Must extend over at least one mode!"
+    permutedims!(x, mlabel(y))
+    zdata = padcat_(
+        reshape(x.data,size(x)...), reshape(y.data,size(y)...),
+        [k in extendmodes for k in mlabel(x)]
+    )
+    return Tensor(
+        [Mode(k,n) for (k,n) in zip(mlabel(x), size(zdata))], 
+        vec(zdata)
+    )
 end
 
 
