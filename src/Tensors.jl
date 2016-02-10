@@ -376,31 +376,52 @@ function *(t1::Tensor, t2::Tensor)
 end
 
 
-# Scaling by diagonal matrix
+# Scaling by diagonal matrices
 
-function Base.scale(t1::Tensor, t2::Tensor)
-    # At the moment, the only intended use of this function is to 
-    # undo the SVD through U*scale(s,V) == scale(U,s)*V. It might 
-    # get replaced with some more general function in the future. 
-    if ndims(t1) == 1 return scale_rows(t1,t2)
-    elseif ndims(t2) == 1 return scale_cols(t1,t2)
-    else error("One of the two arguments to scale has to be a one-dimensional tensor") end
+@generated function Base.scale!(R::Array, A::Array, b::Vector...)
+    N = length(b)
+    quote
+        @assert size(R) == size(A)
+
+        stride_1 = 1
+        @nexprs $N d->(stride_{d+1} = stride_d*size(A, d))
+        $(symbol(:offset_, N)) = 1
+        $(symbol(:b_, N)) = 1
+        
+        @nloops $N i A d->(
+            offset_{d-1} = offset_d + (i_d-1)*stride_d;
+            b_{d-1} = b[d][i_d]*b_d
+        ) begin
+            @inbounds R[offset_0] = b_0*A[offset_0]
+        end
+        return A
+    end
+end
+Base.scale!(A::Array, b::Vector...) = scale!(A,A,b...)
+Base.scale(A::Array, b::Vector...) = scale!(Array{eltype(A)}(size(A)),A,b)
+
+function splitAb(t::Tensor...)
+    i = max(findfirst(t -> ndims(t) > 1, t), 1)
+    A = t[i]
+    b = [
+        (j = findfirst(t -> multiplies(mlabel(t)[1], mlabel(k)), t[1:i-1])) > 0 ? t[j].data : 
+            (j = findfirst(t -> multiplies(mlabel(k), mlabel(t)[1]), t[i+1:end])) > 0 ? t[i+j].data : 
+                ones(msize(k))
+        for k in mode(A)
+    ]
+    return A,b
 end
 
-function scale_rows(b::Tensor, A::Tensor)
-    k = mlabel(b)[1]
-    i = findfirst(l -> multiplies(k,l), mlabel(A))
-    permutedimsI!(A, [i; 1:i-1; i+1:ndims(A)])
-    nk = msize(A.modes[1])
-    return Tensor(A.modes, vec(scale(b.data, reshape(A.data, (nk, div(length(A),nk))))))
+function Base.scale!(t::Tensor...)
+    A,b = splitAb(t...)
+    scale!(reshape(A.data, size(A)...), b...)
+    return A
 end
-
-function scale_cols(A::Tensor, b::Tensor)
-    k = mlabel(b)[1]
-    i = findfirst(l -> multiplies(l,k), mlabel(A))
-    permutedimsI!(A, [1:i-1; i+1:ndims(A); i])
-    nk = msize(A.modes[end])
-    return Tensor(A.modes, vec(scale(reshape(A.data, (div(length(A),nk),nk)), b.data)))
+function Base.scale(t::Tensor...)
+    A,b = splitAb(t...)
+    R = Tensor(copy(A.modes), Array{eltype(A)}(length(A)))
+    scale!(reshape(R.data, size(A)...), reshape(A.data, size(A)...), b...)
+    return R
 end
 
 
