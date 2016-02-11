@@ -1,6 +1,7 @@
 module Tensors
 
 using Base.Cartesian
+import Base.==
 
 export 
     Mode, msize, mlabel, Row, Col, Square, pushm, pushm!, Index, index,
@@ -48,6 +49,7 @@ msize(k::Mode) = k.msize
 msize(K::AbstractVector{Mode}) = length(K) > 0 ? prod(map(msize,K)) : 1
 mlabel(k::Mode) = k.mlabel
 mlabel(K::AbstractVector{Mode}) = Any[k.mlabel for k in K]
+==(k::Mode, l::Mode) = mlabel(k) == mlabel(l) && msize(k) == msize(l)
 multiplies(k::Any,l::Any) = k == l
 multiplies(k::Mode, l::Mode) = multiplies(mlabel(k), mlabel(l))
 
@@ -65,6 +67,8 @@ for T in (Any, Mode)
     end
 end
 
+==(k::Row, l::Row) = k.mlabel == l.mlabel 
+==(k::Col, l::Col) = k.mlabel == l.mlabel 
 multiplies(k::Col, l::Row) = multiplies(k.mlabel, l.mlabel)
 multiplies(k::Any, l::Row) = multiplies(k       , l.mlabel)
 multiplies(k::Col, l::Any) = multiplies(k.mlabel, l       )
