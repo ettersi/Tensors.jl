@@ -5,7 +5,7 @@ using Base.Cartesian
 export 
     Mode, msize, mlabel, Row, Col, Square, pushm, pushm!, Index, index,
     Virtual, splitm, splitm!, mergem, mergem!, resize,
-    Tensor, mode, mlabel, msize,
+    Tensor, scalartype, mode, mlabel, msize,
     empty, init,
     padcat, adaptive, fixed, maxrank
 
@@ -93,6 +93,8 @@ pushm(x::Tensor, M::AbstractVector, y::Tensor) = pushm(x,M)*pushm(M,y)
 
 # Basic functions
 
+scalartype(x) = scalartype(typeof(x))
+scalartype{T}(::Type{Tensor{T}}) = T
 Base.eltype{T}(::Type{Tensor{T}}) = T
 Base.length(t::Tensor) = length(t.data)
 Base.ndims(t::Tensor) = length(t.modes)
