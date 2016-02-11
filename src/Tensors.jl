@@ -170,6 +170,8 @@ for f in (:zeros, :ones, :rand, :randn)
 end
 Base.eye{T}(::Type{T}, D::Vector{Mode}) = Tensor(Square(D), vec(eye(T, msize(D))))
 Base.eye(D::Vector{Mode}) = eye(Float64, D)
+Base.one{T}(::Type{Tensor{T}}) = Tensor(Mode[],ones(T,1))
+Base.one(t::Tensor) = one(scalartype(t))
 
 function init{T}(f::Function, ::Type{T}, D::Vector{Mode})
     x = empty(T,D)
