@@ -7,7 +7,7 @@ export
     Mode, msize, mlabel, Index, index,
     Virtual, splitm, splitm!, mergem, mergem!, resize,
     Tensor, scalartype, mode, msize,
-    empty, init, 
+    empty, init, single_entry,
     padcat, Tag, tag!, tag, untag!, untag, adaptive, fixed, maxrank
 
 
@@ -107,6 +107,11 @@ mlabel(t::Tensor) = mlabel(t.modes)
 msize(t::Tensor) = size(t)
 msize(t::Tensor, k) = msize(mode(t,k))
 Base.copy(t::Tensor) = Tensor(copy(t.modes), copy(t.data))
+
+function single_entry(t::Tensor) 
+    @assert ndims(t) == 0
+    return t.data[1]
+end
 
 
 # Indexing
