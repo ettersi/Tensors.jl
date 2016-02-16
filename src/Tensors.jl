@@ -4,11 +4,11 @@ using Base.Cartesian
 import Base.==
 
 export 
-    Mode, msize, mlabel, Row, Col, Square, pushm, pushm!, Index, index,
+    Mode, msize, mlabel, Index, index,
     Virtual, splitm, splitm!, mergem, mergem!, resize,
-    Tensor, scalartype, mode, mlabel, msize,
-    empty, init,
-    padcat, adaptive, fixed, maxrank
+    Tensor, scalartype, mode, msize,
+    empty, init, 
+    padcat, Tag, tag!, tag, untag!, untag, adaptive, fixed, maxrank
 
 
 # Typedefs
@@ -18,8 +18,7 @@ immutable Mode
     msize::Int
 end
 
-immutable Row{T} mlabel::T end
-immutable Col{T} mlabel::T end
+immutable Tag{T,U} mlabel::U end
 
 immutable Virtual{T}
     mlabel::T
@@ -37,8 +36,7 @@ end
 # Output formatting
 
 Base.show(io::IO, k::Mode   ) = (print(io,"Mode("); show(io,mlabel(k)); print(io,",",msize(k),")"))
-Base.show(io::IO, k::Row    ) = (print(io,"Row("); show(io,k.mlabel); print(io,")"))
-Base.show(io::IO, k::Col    ) = (print(io,"Col("); show(io,k.mlabel); print(io,")"))
+Base.show{T}(io::IO, k::Tag{T}) = (print(io, T,"("); show(io,k.mlabel); print(io,")"))
 Base.show(io::IO, k::Virtual) = (print(io,"Virtual("); show(io,k.mlabel); print(io,",",k.scale")"))
 Base.show(io::IO, t::Tensor ) = print(io,"Tensor{",eltype(t),"}([",join(map(string, mode(t)), ", "),"])")
 
@@ -54,45 +52,43 @@ multiplies(k::Any,l::Any) = k == l
 multiplies(k::Mode, l::Mode) = multiplies(mlabel(k), mlabel(l))
 
 
-# Range and domain mode labels
+# Mode tags
 
-Row(k::Mode) = Mode(Row(mlabel(k)),msize(k))
-Col(k::Mode) = Mode(Col(mlabel(k)),msize(k))
-for T in (Any, Mode)
-    @eval begin
-        Row(K::AbstractVector{$T}) = $T[Row(k) for k in K]
-        Col(K::$(T == Mode ? AbstractVector{Mode} : AbstractVector)) = $T[Col(k) for k in K]
-        Square(k::$T) = $T[Row(k), Col(k)]
-        Square(K::$(T == Mode ? AbstractVector{Mode} : AbstractVector)) = vec($T[X(k) for k in K, X in [Row,Col]])
+tag(T, k) = Tag{T,typeof(k)}(k)
+tag(T, k::Mode) = Mode(tag(T,mlabel(k)),msize(k))
+tag{U}(T, K::Vector{U}) = U[tag(T,k) for k in K]
+untag(k) = k
+untag(k::Tag) = k.mlabel
+untag(k::Mode) = Mode(untag(k), msize(k))
+untag{U}(K::Vector{U}) = U[untag(T,k) for k in K]
+=={T}(k::Tag{T}, l::Tag{T}) = untag(k) == untag(l)
+
+function tag!(t::Tensor, T, modes)
+    for k in modes
+        i = findfirst(mlabel(t), k)
+        if i == 0 error("Could not find mode $k!"); end
+        t.modes[i] = tag(T, t.modes[i])
     end
+    return t
 end
+tag(t::Tensor, T, modes) = tag!(copy(t), T, modes)
 
-==(k::Row, l::Row) = k.mlabel == l.mlabel 
-==(k::Col, l::Col) = k.mlabel == l.mlabel 
-multiplies(k::Col, l::Row) = multiplies(k.mlabel, l.mlabel)
-multiplies(k::Any, l::Row) = multiplies(k       , l.mlabel)
-multiplies(k::Col, l::Any) = multiplies(k.mlabel, l       )
-
-for (func,RC) in (
-    (:(pushm!(t::Tensor, M::AbstractVector)), :Row), 
-    (:(pushm!(M::AbstractVector, t::Tensor)), :Col)
-    )
-    eval(Expr(
-        :function,
-        func, 
-        quote
-            for k in M
-                i = findfirst(l -> mlabel(l) == k, t.modes)
-                if i == 0 throw(ArgumentError(string("No mode ", k, " in tensor!"))) end
-                t.modes[i] = Mode($RC(k), msize(t.modes[i]))
-            end
-            return t
-        end
-    ))
+function untag!(t::Tensor, modes)
+    for k in modes
+        i = findfirst(untag(t), k)
+        if i == 0 error("Could not find mode $k!"); end
+        t.modes[i] = untag(t.modes[i])
+    end
+    return t
 end
-pushm(t::Tensor, M::AbstractVector) = pushm!(copy(t), M)
-pushm(M::AbstractVector, t::Tensor) = pushm!(M, copy(t))
-pushm(x::Tensor, M::AbstractVector, y::Tensor) = pushm(x,M)*pushm(M,y)
+untag(t::Tensor, modes) = untag!(copy(t), modes)
+
+
+# Row / column mode tags
+
+multiplies(k::Tag{:C}, l::Tag{:R}) = multiplies(k.mlabel, l.mlabel)
+multiplies(k::Any    , l::Tag{:R}) = multiplies(k       , l.mlabel)
+multiplies(k::Tag{:C}, l::Any    ) = multiplies(k.mlabel, l       )
 
 
 # Basic functions
@@ -283,8 +279,8 @@ Base.conj!(t::Tensor) = (conj!(t.data); return t)
 Base.conj(t::Tensor) = conj!(copy(t))
 function Base.transpose!(t::Tensor)
     for (i,k) in enumerate(t.modes)
-        if isa(mlabel(k), Row) t.modes[i] = Mode(Col(mlabel(k).mlabel), msize(k))
-        elseif isa(mlabel(k), Col) t.modes[i] = Mode(Row(mlabel(k).mlabel), msize(k))
+        if isa(mlabel(k), Tag{:R}) t.modes[i] = Mode(tag(:C,mlabel(k).mlabel), msize(k))
+        elseif isa(mlabel(k), Tag{:C}) t.modes[i] = Mode(tag(:R,mlabel(k).mlabel), msize(k))
         end
     end
     return t
@@ -365,13 +361,13 @@ function mergemodes(M, K1, K2, N)
     M = copy(M)
     N = copy(N)
     for (k1,k2) in zip(K1,K2)
-        if isa(mlabel(k1), Col) && !isa(mlabel(k2), Row)
+        if isa(mlabel(k1), Tag{:C}) && !isa(mlabel(k2), Tag{:R})
             l = mlabel(k1).mlabel
-            i = findfirst(m -> mlabel(m) == Row(l), M)
+            i = findfirst(m -> mlabel(m) == tag(:R,l), M)
             if i > 0 M[i] = Mode(l, msize(M[i])) end
-        elseif !isa(mlabel(k1), Col) && isa(mlabel(k2), Row)
+        elseif !isa(mlabel(k1), Tag{:C}) && isa(mlabel(k2), Tag{:R})
             l = mlabel(k2).mlabel
-            i = findfirst(m -> mlabel(m) == Col(l), N)
+            i = findfirst(m -> mlabel(m) == tag(:C,l), N)
             if i > 0 N[i] = Mode(l, msize(N[i])) end
         end
     end
@@ -440,7 +436,7 @@ function Base.qr(t::Tensor, k::Any, r = maxrank(t,k))
     F = qrfact(t[Dmk,k])
     kk = Mode(k,r)
     return Tensor([mode(t,Dmk);kk], vec(F[:Q]*eye(eltype(t), msize(t,Dmk),r))), 
-           Tensor([Row(kk),Col(mode(t,k))], vec(F[:R][1:r,:]))
+           Tensor([tag(:R,kk),tag(:C,mode(t,k))], vec(F[:R][1:r,:]))
 end
 function Base.qr(t::Tensor, K::AbstractVector, k::Any, r = maxrank(t,K))
     DmK = setdiff(mlabel(t),K)
@@ -459,7 +455,7 @@ function Base.svd(t::Tensor, k::Any, rank = maxrank())
     kk = Mode(k, rank(F[:S]))
     return Tensor([mode(t,Kc); kk], vec(F[:U][:,1:msize(kk)])), 
            Tensor([kk], F[:S][1:msize(kk)]), 
-           Tensor([Row(kk);Col(mode(t,k))], vec(F[:Vt][1:msize(kk), :]))
+           Tensor([tag(:R,kk);tag(:C,mode(t,k))], vec(F[:Vt][1:msize(kk), :]))
 end
 function Base.svd(t::Tensor, K::AbstractVector, k::Any, rank = maxrank())
     Kc = setdiff(mlabel(t), K)
