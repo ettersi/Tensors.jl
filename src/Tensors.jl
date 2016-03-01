@@ -56,11 +56,13 @@ multiplies(k::Mode, l::Mode) = multiplies(mlabel(k), mlabel(l))
 
 tag(T, k) = Tag{T,typeof(k)}(k)
 tag(T, k::Mode) = Mode(tag(T,mlabel(k)),msize(k))
-tag{U}(T, K::Vector{U}) = U[tag(T,k) for k in K]
+tag(T, K::Vector) = Any[tag(T,k) for k in K]
+tag(T, K::Vector{Mode}) = Mode[tag(T,k) for k in K]
 untag(k) = k
 untag(k::Tag) = k.mlabel
-untag(k::Mode) = Mode(untag(k), msize(k))
-untag{U}(K::Vector{U}) = U[untag(T,k) for k in K]
+untag(k::Mode) = Mode(untag(mlabel(k)), msize(k))
+untag(K::Vector) = Any[untag(k) for k in K]
+untag(K::Vector{Mode}) = Mode[untag(k) for k in K]
 =={T}(k::Tag{T}, l::Tag{T}) = untag(k) == untag(l)
 
 function tag!(t::Tensor, T, modes)
@@ -75,7 +77,7 @@ tag(t::Tensor, T, modes) = tag!(copy(t), T, modes)
 
 function untag!(t::Tensor, modes)
     for k in modes
-        i = findfirst(untag(t), k)
+        i = findfirst(untag(mlabel(t)), k)
         if i == 0 error("Could not find mode $k!"); end
         t.modes[i] = untag(t.modes[i])
     end
