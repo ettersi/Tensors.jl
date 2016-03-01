@@ -8,7 +8,8 @@ export
     Virtual, splitm, splitm!, mergem, mergem!, resize,
     Tensor, scalartype, mode, msize,
     empty, init, single_entry,
-    padcat, Tag, tag!, tag, untag!, untag, adaptive, fixed, maxrank
+    padcat, Tag, tag!, tag, untag!, untag, square,
+    adaptive, fixed, maxrank
 
 
 # Typedefs
@@ -87,6 +88,11 @@ untag(t::Tensor, modes) = untag!(copy(t), modes)
 
 
 # Row / column mode tags
+
+square(k) = [tag(:R,k), tag(:C,k)]
+square(k::Mode) = Mode[tag(:R,k), tag(:C,k)]
+square(K::Vector{Any}) = Any[tag(:R,K); tag(:C,K)]
+square(K::Vector{Mode}) = Mode[tag(:R,K); tag(:C,K)]
 
 multiplies(k::Tag{:C}, l::Tag{:R}) = multiplies(k.mlabel, l.mlabel)
 multiplies(k::Any    , l::Tag{:R}) = multiplies(k       , l.mlabel)
