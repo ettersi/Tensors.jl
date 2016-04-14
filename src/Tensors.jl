@@ -309,6 +309,8 @@ for f in (:+,:-)
             permutedims!(t2, mlabel(t1))
             return Tensor(copy(t1.modes), $f(t1.data, t2.data))
         end
+        Base.$f(a::Number, t::Tensor) = Tensor(copy(t.modes), $f(a, t.data))
+        Base.$f(t::Tensor, a::Number) = Tensor(copy(t.modes), $f(t.data, a))
         Base.$f(t::Tensor) = Tensor(copy(t.modes), $f(t.data))
     end
 end
