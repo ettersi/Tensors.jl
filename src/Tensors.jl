@@ -8,7 +8,7 @@ export
     Virtual, splitm, splitm!, mergem, mergem!, resize,
     Tensor, scalartype, mode, msize,
     empty, init, scalar,
-    padcat, Tag, tag!, tag, untag!, untag, square,
+    padcat, Tag, tag!, tag, untag!, untag, istagged, square,
     adaptive, fixed, maxrank
 
 
@@ -85,6 +85,10 @@ function untag!(t::Tensor, modes)
     return t
 end
 untag(t::Tensor, modes) = untag!(copy(t), modes)
+
+istagged{T}(k::Tag{T}, T) = true
+istagged{T}(k::Any, T) = false
+istagged{T}(k::Mode, T) = istagged(k.mlabel,T)
 
 
 # Row / column mode tags
@@ -292,8 +296,8 @@ Base.conj!(t::Tensor) = (conj!(t.data); return t)
 Base.conj(t::Tensor) = conj!(copy(t))
 function Base.transpose!(t::Tensor)
     for (i,k) in enumerate(t.modes)
-        if isa(mlabel(k), Tag{:R}) t.modes[i] = Mode(tag(:C,mlabel(k).mlabel), msize(k))
-        elseif isa(mlabel(k), Tag{:C}) t.modes[i] = Mode(tag(:R,mlabel(k).mlabel), msize(k))
+        if istagged(k,:R) t.modes[i] = tag(:C,untag(k))
+        elseif istagged(k,:C) t.modes[i] = tag(:R,untag(k))
         end
     end
     return t
@@ -376,11 +380,11 @@ function mergemodes(M, K1, K2, N)
     M = copy(M)
     N = copy(N)
     for (k1,k2) in zip(K1,K2)
-        if isa(mlabel(k1), Tag{:C}) && !isa(mlabel(k2), Tag{:R})
+        if istagged(k1,:C) && !istagged(k2,:R)
             l = mlabel(k1).mlabel
             i = findfirst(m -> mlabel(m) == tag(:R,l), M)
             if i > 0 M[i] = Mode(l, msize(M[i])) end
-        elseif !isa(mlabel(k1), Tag{:C}) && isa(mlabel(k2), Tag{:R})
+        elseif !istagged(k1,:C) && istagged(k2,:R)
             l = mlabel(k2).mlabel
             i = findfirst(m -> mlabel(m) == tag(:C,l), N)
             if i > 0 N[i] = Mode(l, msize(N[i])) end
