@@ -57,13 +57,13 @@ multiplies(k::Mode, l::Mode) = multiplies(mlabel(k), mlabel(l))
 
 tag(T, k) = Tag{T,typeof(k)}(k)
 tag(T, k::Mode) = Mode(tag(T,mlabel(k)),msize(k))
-tag(T, K::Vector) = Any[tag(T,k) for k in K]
-tag(T, K::Vector{Mode}) = Mode[tag(T,k) for k in K]
+tag(T, K::AbstractVector) = Any[tag(T,k) for k in K]
+tag(T, K::AbstractVector{Mode}) = Mode[tag(T,k) for k in K]
 untag(k) = k
 untag(k::Tag) = k.mlabel
 untag(k::Mode) = Mode(untag(mlabel(k)), msize(k))
-untag(K::Vector) = Any[untag(k) for k in K]
-untag(K::Vector{Mode}) = Mode[untag(k) for k in K]
+untag(K::AbstractVector) = Any[untag(k) for k in K]
+untag(K::AbstractVector{Mode}) = Mode[untag(k) for k in K]
 =={T}(k::Tag{T}, l::Tag{T}) = untag(k) == untag(l)
 
 function tag!(t::Tensor, T, modes)
@@ -86,17 +86,27 @@ function untag!(t::Tensor, modes)
 end
 untag(t::Tensor, modes) = untag!(copy(t), modes)
 
-istagged{T}(k::Tag{T}, T) = true
-istagged{T}(k::Any, T) = false
-istagged{T}(k::Mode, T) = istagged(k.mlabel,T)
+istagged{T}(k::Tag{T}, TT) = T == TT
+istagged(k::Any, TT) = false
+istagged(k::Mode, TT) = istagged(k.mlabel,TT)
+
+function filtertags(K::AbstractVector{Any}, T)
+    KK = Vector{Any}()
+    for k in K
+        if istagged(k,T)
+            push!(KK,untag(k))
+        end
+    end
+    return KK
+end
 
 
 # Row / column mode tags
 
-square(k) = [tag(:R,k), tag(:C,k)]
-square(k::Mode) = Mode[tag(:R,k), tag(:C,k)]
-square(K::Vector{Any}) = Any[tag(:R,K); tag(:C,K)]
-square(K::Vector{Mode}) = Mode[tag(:R,K); tag(:C,K)]
+square(k) = [tag(:R,k); tag(:C,k)]
+square(k::Mode) = Mode[tag(:R,k); tag(:C,k)]
+square(K::AbstractVector{Any}) = Any[tag(:R,K); tag(:C,K)]
+square(K::AbstractVector{Mode}) = Mode[tag(:R,K); tag(:C,K)]
 
 multiplies(k::Tag{:C}, l::Tag{:R}) = multiplies(k.mlabel, l.mlabel)
 multiplies(k::Any    , l::Tag{:R}) = multiplies(k       , l.mlabel)
@@ -148,7 +158,7 @@ Base.setindex!(t::Tensor, ti, i::Pair...) = t[Index(i...)] = ti
 # Index iteration
 
 immutable IndexSet D::Vector{Mode} end
-index(D::Vector{Mode}) = IndexSet(D)
+index(D::AbstractVector{Mode}) = IndexSet(D)
 index(t::Tensor) = index(mode(t))
 
 Base.start(idx::IndexSet) = Index(map(m -> (mlabel(m),1), idx.D))
@@ -173,35 +183,36 @@ Base.length(idx::IndexSet) = msize(idx.D)
 
 # Construction and Initialization
 
-empty{T}(::Type{T}, D::Vector{Mode}) = Tensor(D, Array{T}(msize(D)))
-empty(D::Vector{Mode}) = empty(Float64, D)
+empty{T}(::Type{T}, D::AbstractVector{Mode}) = Tensor(D, Array{T}(msize(D)))
+empty(D::AbstractVector{Mode}) = empty(Float64, D)
 for f in (:zeros, :ones, :rand, :randn)
     @eval begin
-        Base.$f{T}(::Type{T}, D::Vector{Mode}) = Tensor(D, $f(T, msize(D)))
-        Base.$f(D::Vector{Mode}) = $f(Float64, D)
+        Base.$f{T}(::Type{T}, D::AbstractVector{Mode}) = Tensor{T}(D, $f(T, msize(D)))
+        Base.$f(D::AbstractVector{Mode}) = $f(Float64, D)
     end
 end
-Base.eye{T}(::Type{T}, D::Vector{Mode}) = Tensor(Square(D), vec(eye(T, msize(D))))
-Base.eye(D::Vector{Mode}) = eye(Float64, D)
+Base.eye{T}(::Type{T}, D::AbstractVector{Mode}) = Tensor(Square(D), vec(eye(T, msize(D))))
+Base.eye(D::AbstractVector{Mode}) = eye(Float64, D)
 Base.one{T}(::Type{Tensor{T}}) = Tensor(Mode[],ones(T,1))
 Base.one(t::Tensor) = one(scalartype(t))
 
-function init{T}(f::Function, ::Type{T}, D::Vector{Mode})
+function init{T}(f::Function, ::Type{T}, D::AbstractVector{Mode})
     x = empty(T,D)
     for (il,i) in enumerate(index(D))
         x.data[il] = f(i)
     end
     return x
 end
-init(f::Function, D::Vector{Mode}) = init(f, Float64, D)
+init(f::Function, D::AbstractVector{Mode}) = init(f, Float64, D)
 
 
 # Storage order permutations
 
-function permutedimsI!(t::Tensor, perm::Vector{Int})
-    if length(perm) == 0 return t end
-    t.data = vec(permutedims(reshape(t.data,size(t)...),perm))
-    t.modes = t.modes[perm]
+function permutedimsI!(t::Tensor, perm::AbstractVector{Int})
+    if length(perm) != 0 && perm != collect(1:length(perm))
+        t.data = vec(permutedims(reshape(t.data,size(t)...),perm))
+        t.modes = t.modes[perm]
+    end
     return t
 end
 Base.permutedims!(t::Tensor, newmodes::AbstractVector) = permutedimsI!(t, findpermutation(mlabel(t.modes), newmodes))
@@ -244,7 +255,7 @@ end
 
 # Concatenation and padding (for TN sum)
 
-@generated function padcat_{T,N}(x::Array{T,N}, y::Array{T,N}, extendmode::Vector{Bool})
+@generated function padcat_{T,N}(x::Array{T,N}, y::Array{T,N}, extendmode::AbstractVector{Bool})
     quote
         z = zeros(T, (collect(size(x)) + extendmode.*collect(size(y)))...)
 
@@ -357,7 +368,7 @@ end
 
 # Mode product
 
-function matchmodes(M1::Vector{Mode},M2::Vector{Mode})
+function matchmodes(M1::AbstractVector{Mode},M2::AbstractVector{Mode})
     deleteindex! = (v::Vector, i) -> (v[i] = v[end]; pop!(v))
     M = Array(Mode,0)
     K1 = Array(Mode,0)
@@ -401,7 +412,7 @@ end
 
 # Scaling by diagonal matrices
 
-@generated function Base.scale!(R::Array, A::Array, b::Vector...)
+@generated function _scale!(R::Array, A::Array, b::AbstractVector...)
     N = length(b)
     quote
         @assert size(R) == size(A)
@@ -420,8 +431,7 @@ end
         return A
     end
 end
-Base.scale!(A::Array, b::Vector...) = scale!(A,A,b...)
-Base.scale(A::Array, b::Vector...) = scale!(Array{eltype(A)}(size(A)),A,b)
+_scale!(A::Array, b::AbstractVector...) = _scale!(A,A,b...)
 
 function splitAb(t::Tensor...)
     i = max(findfirst(t -> ndims(t) > 1, t), 1)
@@ -437,13 +447,13 @@ end
 
 function Base.scale!(t::Tensor...)
     A,b = splitAb(t...)
-    scale!(reshape(A.data, size(A)...), b...)
+    _scale!(reshape(A.data, size(A)...), b...)
     return A
 end
 function Base.scale(t::Tensor...)
     A,b = splitAb(t...)
     R = Tensor(copy(A.modes), Array{eltype(A)}(length(A)))
-    scale!(reshape(R.data, size(A)...), reshape(A.data, size(A)...), b...)
+    _scale!(reshape(R.data, size(A)...), reshape(A.data, size(A)...), b...)
     return R
 end
 
