@@ -12,6 +12,14 @@ export
     adaptive, fixed, maxrank
 
 
+# Scalartype
+
+scalartype(::Type{Any}) = throw(MethodError(scalartype, (Any,)))
+scalartype(t::DataType) = scalartype(super(t))
+scalartype(x) = scalartype(typeof(x))
+scalartype{T <: Number}(::Type{T}) = T
+
+
 # Typedefs
 
 immutable Mode
@@ -115,7 +123,6 @@ multiplies(k::Tag{:C}, l::Any    ) = multiplies(k.mlabel, l       )
 
 # Basic functions
 
-scalartype(x) = scalartype(typeof(x))
 scalartype{T}(::Type{Tensor{T}}) = T
 Base.eltype{T}(::Type{Tensor{T}}) = T
 Base.length(t::Tensor) = length(t.data)
@@ -241,9 +248,11 @@ end
 
 mergem(t::Tensor, m#=::Dict{Vector, Any}=#) = mergem!(copy(t),m)
 function mergem!(t::Tensor, m#=::Dict{Vector, Any}=#) 
-    permutedims!(t,vcat([K for K in keys(m)]...))
+    K = vcat([K for K in keys(m)]...)
+    DmK = setdiff(mlabel(t),K)
+    permutedims!(t, vcat(K, DmK))
     n = (k = 1; [msize(t.modes[k:(k+=length(K))-1]) for K in keys(m)])
-    t.modes = Mode[Mode(k,nk) for (k,nk) in zip(values(m),n)]
+    t.modes = vcat(Mode[Mode(k,nk) for (k,nk) in zip(values(m),n)], mode(t,DmK))
     return t
 end
 
@@ -431,7 +440,7 @@ end
         return A
     end
 end
-_scale!(A::Array, b::AbstractVector...) = _scale!(A,A,b...)
+_scale_inplace!(A::Array, b::AbstractVector...) = _scale!(A,A,b...)
 
 function splitAb(t::Tensor...)
     i = max(findfirst(t -> ndims(t) > 1, t), 1)
@@ -447,7 +456,7 @@ end
 
 function Base.scale!(t::Tensor...)
     A,b = splitAb(t...)
-    _scale!(reshape(A.data, size(A)...), b...)
+    _scale_inplace!(reshape(A.data, size(A)...), b...)
     return A
 end
 function Base.scale(t::Tensor...)
