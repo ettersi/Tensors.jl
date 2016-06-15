@@ -58,7 +58,7 @@ mlabel(k::Mode) = k.mlabel
 mlabel(K::AbstractVector{Mode}) = Any[k.mlabel for k in K]
 ==(k::Mode, l::Mode) = mlabel(k) == mlabel(l) && msize(k) == msize(l)
 multiplies(k::Any,l::Any) = k == l
-multiplies(k::Mode, l::Mode) = multiplies(mlabel(k), mlabel(l))
+replacemodes(k::Any, l::Any) = Pair[]
 
 
 # Mode tags
@@ -139,6 +139,10 @@ square(K::AbstractVector{Mode}) = Mode[tag(:R,K); tag(:C,K)]
 multiplies(k::Tag{:C}, l::Tag{:R}) = multiplies(k.mlabel, l.mlabel)
 multiplies(k::Any    , l::Tag{:R}) = multiplies(k       , l.mlabel)
 multiplies(k::Tag{:C}, l::Any    ) = multiplies(k.mlabel, l       )
+
+replacemodes(k::Tag{:C}, l::Tag{:R}) = Pair[]
+replacemodes(k::Tag{:C}, l::Any    ) = Pair[tag(:R,untag(k)) => untag(k)]
+replacemodes(k::Any    , l::Tag{:R}) = Pair[tag(:C,untag(k)) => untag(k)]
 
 
 # Basic functions
@@ -417,25 +421,22 @@ function matchmodes(M1::AbstractVector{Mode},M2::AbstractVector{Mode})
 end
 
 function mergemodes(M, K1, K2, N)
-    M = copy(M)
-    N = copy(N)
+    D = [M;N]
     for (k1,k2) in zip(K1,K2)
-        if istagged(k1,:C) && !istagged(k2,:R)
-            l = mlabel(k1).mlabel
-            i = findfirst(m -> mlabel(m) == tag(:R,l), M)
-            if i > 0 M[i] = Mode(l, msize(M[i])) end
-        elseif !istagged(k1,:C) && istagged(k2,:R)
-            l = mlabel(k2).mlabel
-            i = findfirst(m -> mlabel(m) == tag(:C,l), N)
-            if i > 0 N[i] = Mode(l, msize(N[i])) end
+        for (old,new) in replacemodes(mlabel(k1),mlabel(k2))
+            i = findfirst(mlabel(D), old)
+            if i > 0
+                D[i] = Mode(new, msize(D[i]))
+            end
         end
     end
-    return [M;N]
+    return D
 end
 
 function *(t1::Tensor, t2::Tensor)
     M,K1,K2,N = matchmodes(t1.modes,t2.modes)
-    return Tensor(mergemodes(M,K1,K2,N), vec(t1[mlabel(M),mlabel(K1)] * t2[mlabel(K2),mlabel(N)]))
+    D = mergemodes(M,K1,K2,N)
+    return Tensor(D, vec(t1[mlabel(M),mlabel(K1)] * t2[mlabel(K2),mlabel(N)]))
 end
 
 
