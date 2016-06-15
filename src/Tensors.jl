@@ -8,7 +8,7 @@ export
     Virtual, splitm, splitm!, mergem, mergem!, resize,
     Tensor, scalartype, mode, msize,
     empty, init, scalar,
-    padcat, Tag, tag!, tag, untag!, untag, istagged, square,
+    padcat, Tag, tag!, tag, untag!, untag, istagged, square, retag!, retag, filtertags,
     adaptive, fixed, maxrank
 
 
@@ -74,6 +74,10 @@ untag(K::AbstractVector) = Any[untag(k) for k in K]
 untag(K::AbstractVector{Mode}) = Mode[untag(k) for k in K]
 =={T}(k::Tag{T}, l::Tag{T}) = untag(k) == untag(l)
 
+istagged{T}(k::Tag{T}, TT) = T == TT
+istagged(k::Any, TT) = false
+istagged(k::Mode, TT) = istagged(k.mlabel,TT)
+
 function tag!(t::Tensor, T, modes)
     for k in modes
         i = findfirst(mlabel(t), k)
@@ -84,7 +88,7 @@ function tag!(t::Tensor, T, modes)
 end
 tag(t::Tensor, T, modes) = tag!(copy(t), T, modes)
 
-function untag!(t::Tensor, modes)
+function untag!(t::Tensor, modes::AbstractVector)
     for k in modes
         i = findfirst(untag(mlabel(t)), k)
         if i == 0 error("Could not find mode $k!"); end
@@ -92,11 +96,27 @@ function untag!(t::Tensor, modes)
     end
     return t
 end
-untag(t::Tensor, modes) = untag!(copy(t), modes)
+untag(t::Tensor, modes::AbstractVector) = untag!(copy(t), modes)
 
-istagged{T}(k::Tag{T}, TT) = T == TT
-istagged(k::Any, TT) = false
-istagged(k::Mode, TT) = istagged(k.mlabel,TT)
+function untag!(t::Tensor, T)
+    for (i,k) in enumerate(t.modes)
+        if istagged(k,T)
+            t.modes[i] = untag(k)
+        end
+    end
+    return t
+end
+untag(t::Tensor, T) = untag!(copy(t), T)
+
+function retag!(t::Tensor, OldT, NewT)
+    for (i,k) in enumerate(t.modes)
+        if istagged(k,OldT)
+            t.modes[i] = tag(NewT,untag(k))
+        end
+    end
+    return t
+end
+retag(t::Tensor, args...) = retag!(copy(t), args...)
 
 function filtertags(K::AbstractVector{Any}, T)
     KK = Vector{Any}()
