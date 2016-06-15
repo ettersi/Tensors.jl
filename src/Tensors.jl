@@ -374,6 +374,14 @@ function Base.dot(t1::Tensor,t2::Tensor)
 end
 Base.norm(t::Tensor) = vecnorm(t.data)
 
+import Base: \
+function \(A::Tensor, x::Tensor)
+    KA = filtertags(mlabel(A), :R)
+    Kx = [x.modes[findfirst(l -> multiplies(k,l), mlabel(x))] for k in KA]
+    Kcx = setdiff(x.modes,Kx)
+    return Tensor([Kx;Kcx], vec(A[tag(:R,KA), tag(:C,KA)]\x[mlabel(Kx),mlabel(Kcx)]))
+end
+
 
 # Unary elementwise arithmetic
 
