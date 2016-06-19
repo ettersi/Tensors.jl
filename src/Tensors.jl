@@ -1,19 +1,11 @@
 module Tensors
 
 using Base.Cartesian
-import Base.==
-
-export 
-    Mode, msize, mlabel, Index, index,
-    Virtual, splitm, splitm!, mergem, mergem!, resize,
-    Tensor, scalartype, mode, msize,
-    empty, init, scalar,
-    padcat, Tag, tag!, tag, untag!, untag, istagged, square, retag!, retag, filtertags,
-    adaptive, fixed, maxrank
 
 
 # Scalartype
 
+export scalartype
 scalartype(::Type{Any}) = throw(MethodError(scalartype, (Any,)))
 scalartype(t::DataType) = scalartype(super(t))
 scalartype(x) = scalartype(typeof(x))
@@ -22,11 +14,13 @@ scalartype{T <: Number}(::Type{T}) = T
 
 # Typedefs
 
+export Mode
 immutable Mode
     mlabel::Any
     msize::Int
 end
 
+export Tag
 immutable Tag{T,U} mlabel::U end
 
 immutable Virtual{T}
@@ -34,8 +28,10 @@ immutable Virtual{T}
     scale::Int
 end
 
+export Index
 typealias Index Dict{Any,Int}
 
+export Tensor
 type Tensor{T}
     modes::Vector{Mode}
     data::Vector{T}
@@ -52,17 +48,19 @@ Base.show(io::IO, t::Tensor ) = print(io,"Tensor{",eltype(t),"}([",join(map(stri
 
 # Mode
 
+export msize,mlabel
 msize(k::Mode) = k.msize
 msize(K::AbstractVector{Mode}) = length(K) > 0 ? prod(map(msize,K)) : 1
 mlabel(k::Mode) = k.mlabel
 mlabel(K::AbstractVector{Mode}) = Any[k.mlabel for k in K]
-==(k::Mode, l::Mode) = mlabel(k) == mlabel(l) && msize(k) == msize(l)
+import Base.==; ==(k::Mode, l::Mode) = mlabel(k) == mlabel(l) && msize(k) == msize(l)
 multiplies(k::Any,l::Any) = k == l
 replacemodes(k::Any, l::Any) = Pair[]
 
 
 # Mode tags
 
+export tag, untag
 tag(T, k) = Tag{T,typeof(k)}(k)
 tag(T, k::Mode) = Mode(tag(T,mlabel(k)),msize(k))
 tag(T, K::AbstractVector) = Any[tag(T,k) for k in K]
@@ -72,12 +70,14 @@ untag(k::Tag) = k.mlabel
 untag(k::Mode) = Mode(untag(mlabel(k)), msize(k))
 untag(K::AbstractVector) = Any[untag(k) for k in K]
 untag(K::AbstractVector{Mode}) = Mode[untag(k) for k in K]
-=={T}(k::Tag{T}, l::Tag{T}) = untag(k) == untag(l)
+import Base.==; =={T}(k::Tag{T}, l::Tag{T}) = untag(k) == untag(l)
 
+export istagged
 istagged{T}(k::Tag{T}, TT) = T == TT
 istagged(k::Any, TT) = false
 istagged(k::Mode, TT) = istagged(k.mlabel,TT)
 
+export tag!
 function tag!(t::Tensor, T, modes)
     for k in modes
         i = findfirst(mlabel(t), k)
@@ -88,6 +88,7 @@ function tag!(t::Tensor, T, modes)
 end
 tag(t::Tensor, T, modes) = tag!(copy(t), T, modes)
 
+export untag!
 function untag!(t::Tensor, modes::AbstractVector)
     for k in modes
         i = findfirst(untag(mlabel(t)), k)
@@ -108,6 +109,7 @@ function untag!(t::Tensor, T)
 end
 untag(t::Tensor, T) = untag!(copy(t), T)
 
+export retag!, retag
 function retag!(t::Tensor, OldT, NewT)
     for (i,k) in enumerate(t.modes)
         if istagged(k,OldT)
@@ -118,6 +120,7 @@ function retag!(t::Tensor, OldT, NewT)
 end
 retag(t::Tensor, args...) = retag!(copy(t), args...)
 
+export filtertags
 function filtertags(K::AbstractVector{Any}, T)
     KK = Vector{Any}()
     for k in K
@@ -131,6 +134,7 @@ end
 
 # Row / column mode tags
 
+export square
 square(k) = [tag(:R,k); tag(:C,k)]
 square(k::Mode) = Mode[tag(:R,k); tag(:C,k)]
 square(K::AbstractVector{Any}) = Any[tag(:R,K); tag(:C,K)]
@@ -147,6 +151,7 @@ replacemodes(k::Any    , l::Tag{:R}) = Pair[tag(:C,untag(k)) => untag(k)]
 
 # Basic functions
 
+export mode,msize
 scalartype{T}(::Type{Tensor{T}}) = T
 Base.eltype{T}(::Type{Tensor{T}}) = T
 Base.length(t::Tensor) = length(t.data)
@@ -161,6 +166,7 @@ msize(t::Tensor) = size(t)
 msize(t::Tensor, k) = msize(mode(t,k))
 Base.copy(t::Tensor) = Tensor(copy(t.modes), copy(t.data))
 
+export scalar
 function scalar(t::Tensor) 
     @assert ndims(t) == 0
     return t.data[1]
@@ -214,6 +220,7 @@ Base.length(idx::IndexSet) = msize(idx.D)
 
 # Construction and Initialization
 
+export empty
 empty{T}(::Type{T}, D::AbstractVector{Mode}) = Tensor(D, Array{T}(msize(D)))
 empty(D::AbstractVector{Mode}) = empty(Float64, D)
 for f in (:zeros, :ones, :rand, :randn)
@@ -227,6 +234,7 @@ Base.eye(D::AbstractVector{Mode}) = eye(Float64, D)
 Base.one{T}(::Type{Tensor{T}}) = Tensor(Mode[],ones(T,1))
 Base.one(t::Tensor) = one(scalartype(t))
 
+export init
 function init{T}(f::Function, ::Type{T}, D::AbstractVector{Mode})
     x = empty(T,D)
     for (il,i) in enumerate(index(D))
@@ -259,6 +267,7 @@ end
 
 # Reshaping
 
+export splitm, splitm!
 splitm(t::Tensor, s#=::Dict{Any,Vector{Mode}}=#) = splitm!(copy(t),s)
 function splitm!(t::Tensor, s#=::Dict{Any,Vector{Mode}}=#) 
     for k in mode(t)
@@ -270,6 +279,7 @@ function splitm!(t::Tensor, s#=::Dict{Any,Vector{Mode}}=#)
     return t
 end
 
+export mergem, mergem!
 mergem(t::Tensor, m#=::Dict{Vector, Any}=#) = mergem!(copy(t),m)
 function mergem!(t::Tensor, m#=::Dict{Vector, Any}=#) 
     K = vcat([K for K in keys(m)]...)
@@ -280,6 +290,7 @@ function mergem!(t::Tensor, m#=::Dict{Vector, Any}=#)
     return t
 end
 
+export resize
 function resize(t::Tensor, n)
     modes = [Mode(mlabel(k), get(n, mlabel(k), msize(k))) for k in t.modes]
     return Tensor(modes, vec(reshape(t.data, [nk for nk in size(t)]...)[[1:msize(k) for k in modes]...]))
@@ -288,6 +299,7 @@ end
 
 # Concatenation and padding (for TN sum)
 
+export padcat
 @generated function padcat_{T,N}(x::Array{T,N}, y::Array{T,N}, extendmode::AbstractVector{Bool})
     quote
         z = zeros(T, (collect(size(x)) + extendmode.*collect(size(y)))...)
@@ -441,6 +453,7 @@ function mergemodes(M, K1, K2, N)
     return D
 end
 
+import Base.*
 function *(t1::Tensor, t2::Tensor)
     M,K1,K2,N = matchmodes(t1.modes,t2.modes)
     D = mergemodes(M,K1,K2,N)
@@ -536,6 +549,7 @@ end
 
 # Common rank functions
 
+export adaptive, fixed, maxrank
 adaptive(eps; rel = true) = (s) -> max(length(s) - searchsortedlast(cumsum(reverse(s).^2), (eps*(rel ? vecnorm(s) : 1))^2),1)
 fixed(r) = (s) -> r
 maxrank() = (s) -> length(s)
