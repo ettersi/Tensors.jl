@@ -360,7 +360,8 @@ function Base.transpose!(t::Tensor)
     return t
 end
 Base.transpose(t::Tensor) = transpose!(copy(t))
-
+Base.ctranspose!(t::Tensor) = transpose!(conj!(t))
+Base.ctranspose(t::Tensor) = transpose!(conj(t))
 
 # Vector arithmetic
 
