@@ -110,7 +110,8 @@ end
 untag(t::Tensor, T) = untag!(copy(t), T)
 
 export retag!, retag
-function retag!(t::Tensor, OldT, NewT)
+function retag!(t::Tensor, p::Pair)
+    OldT,NewT = p
     for (i,k) in enumerate(t.modes)
         if istagged(k,OldT)
             t.modes[i] = tag(NewT,untag(k))
