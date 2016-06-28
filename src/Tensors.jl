@@ -230,7 +230,7 @@ for f in (:zeros, :ones, :rand, :randn)
         Base.$f(D::AbstractVector{Mode}) = $f(Float64, D)
     end
 end
-Base.eye{T}(::Type{T}, D::AbstractVector{Mode}) = Tensor(Square(D), vec(eye(T, msize(D))))
+Base.eye{T}(::Type{T}, D::AbstractVector{Mode}) = Tensor(square(D), vec(eye(T, msize(D))))
 Base.eye(D::AbstractVector{Mode}) = eye(Float64, D)
 Base.one{T}(::Type{Tensor{T}}) = Tensor(Mode[],ones(T,1))
 Base.one(t::Tensor) = one(scalartype(t))
