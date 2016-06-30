@@ -158,6 +158,9 @@ export mode,msize
 scalartype{T}(::Type{Tensor{T}}) = T
 Base.eltype{T}(::Type{Tensor{T}}) = T
 Base.length(t::Tensor) = length(t.data)
+Base.start(t::Tensor) = start(t.data)
+Base.next(t::Tensor,state) = next(t.data, state)
+Base.done(t::Tensor,state) = done(t.data, state)
 Base.ndims(t::Tensor) = length(t.modes)
 Base.size(t::Tensor) = map(msize,t.modes)
 Base.size(t::Tensor,k) = msize(t,k)
