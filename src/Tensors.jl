@@ -81,7 +81,7 @@ export tag!
 function tag!(t::Tensor, T, modes)
     for k in modes
         i = findfirst(mlabel(t), k)
-        if i == 0 error("Could not find mode $k!"); end
+        if i == 0 error("Could not find mode $(k)!"); end
         t.modes[i] = tag(T, t.modes[i])
     end
     return t
@@ -111,8 +111,7 @@ untag(t::Tensor, T) = untag!(copy(t), T)
 
 export retag!, retag
 function retag!(t::Tensor, p::Pair...)
-    for p in p
-        OldT,NewT = p
+    for (OldT,NewT) in p
         for (i,k) in enumerate(t.modes)
             if istagged(k,OldT)
                 t.modes[i] = tag(NewT,untag(k))
@@ -171,6 +170,7 @@ mlabel(t::Tensor) = mlabel(t.modes)
 msize(t::Tensor) = size(t)
 msize(t::Tensor, k) = msize(mode(t,k))
 Base.copy(t::Tensor) = Tensor(copy(t.modes), copy(t.data))
+Base.convert{T}(::Type{Tensor{T}}, t::Tensor) = Tensor(t.modes, convert(Vector{T}, t.data))
 
 export scalar
 function scalar(t::Tensor) 
@@ -306,9 +306,11 @@ end
 # Concatenation and padding (for TN sum)
 
 export padcat
-@generated function padcat_{T,N}(x::Array{T,N}, y::Array{T,N}, extendmode::AbstractVector{Bool})
+@generated function padcat_(x::Array, y::Array, extendmode::AbstractVector{Bool})
+    N = ndims(x)
     quote
-        z = zeros(T, (collect(size(x)) + extendmode.*collect(size(y)))...)
+        @assert ndims(x) == ndims(y) == length(extendmode)
+        z = zeros(promote_type(eltype(x),eltype(y)), (collect(size(x)) + extendmode.*collect(size(y)))...)
 
         stridez_1 = 1; @nexprs $N d->(stridez_{d+1} = stridez_d*size(z, d))
         stridex_1 = 1; @nexprs $N d->(stridex_{d+1} = stridex_d*size(x, d))
@@ -399,6 +401,11 @@ function \(A::Tensor, x::Tensor)
     Kx = [x.modes[findfirst(l -> multiplies(k,l), mlabel(x))] for k in KA]
     Kcx = setdiff(x.modes,Kx)
     return Tensor([Kx;Kcx], vec(A[tag(:R,KA), tag(:C,KA)]\x[mlabel(Kx),mlabel(Kcx)]))
+end
+
+function Base.inv(A::Tensor)
+    D = filtertags(mlabel(A), :R)
+    return Tensor(mode(A, square(D)), vec(inv(A[tag(:R,D),tag(:C,D)])))
 end
 
 
@@ -566,9 +573,16 @@ maxrank() = (s) -> length(s)
 
 # Determine perm such that after == before[perm]
 function findpermutation(before, after)
+    if length(before) != length(after) 
+        throw(ArgumentError("The number of modes must be preserved during permutation!"))
+    end
+
     perm = Array(Int,length(after))
     for i in 1:length(after)
         perm[i] = findfirst(before, after[i]) 
+        if perm[i] == 0
+            throw(ArgumentError("Could not find mode $(k)!"))
+        end
     end
     return perm
 end
