@@ -1,7 +1,7 @@
 module Tensors
 
 using Base.Cartesian
-
+using TensorOperations
 
 # Scalartype
 
@@ -255,7 +255,12 @@ init(f::Function, D::AbstractVector{Mode}) = init(f, Float64, D)
 
 function permutedimsI!(t::Tensor, perm::AbstractVector{Int})
     if length(perm) != 0 && perm != collect(1:length(perm))
-        t.data = vec(permutedims(reshape(t.data,size(t)...),perm))
+        data = similar(t.data)
+        t.data = vec(TensorOperations.add!(
+            one(scalartype(t)), reshape(t.data,size(t)...), Val{:N},
+            zero(scalartype(t)), similar(t.data, size(t)[perm]...), 
+            perm
+        ))
         t.modes = t.modes[perm]
     end
     return t
