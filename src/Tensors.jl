@@ -321,9 +321,9 @@ export padcat
         stridex_1 = 1; @nexprs $N d->(stridex_{d+1} = stridex_d*size(x, d))
         stridey_1 = 1; @nexprs $N d->(stridey_{d+1} = stridey_d*size(y, d))
 
-        $(symbol(:offsetz_, N)) = 1
-        $(symbol(:offsetx_, N)) = 1
-        $(symbol(:offsety_, N)) = 1
+        $(Symbol(:offsetz_, N)) = 1
+        $(Symbol(:offsetx_, N)) = 1
+        $(Symbol(:offsety_, N)) = 1
 
         @nexprs $N d->(nx_d = extendmode[d] ? size(x,d) : 0)
 
@@ -489,8 +489,8 @@ end
 
         stride_1 = 1
         @nexprs $N d->(stride_{d+1} = stride_d*size(A, d))
-        $(symbol(:offset_, N)) = 1
-        $(symbol(:b_, N)) = 1
+        $(Symbol(:offset_, N)) = 1
+        $(Symbol(:b_, N)) = 1
         
         @nloops $N i A d->(
             offset_{d-1} = offset_d + (i_d-1)*stride_d;
