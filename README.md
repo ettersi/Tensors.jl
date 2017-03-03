@@ -1,6 +1,6 @@
 # Tensors
 
-Tensors in the sense of this package are multidimensional arrays with the additional twist that indices are distinguished based on labels rather than their position in some linear order. For example, the line 
+Tensors in the sense of this package are multidimensional arrays with the additional twist that indices are distinguished based on labels rather than their position in the argument list. For example, the line 
 ```julia
 x = zeros([Mode(:apple,3), Mode(:orange,4)])
 ``` 
@@ -86,7 +86,7 @@ julia> println("x = ", x[[:a]])
 x = [1,5,4]
 julia> println("y = ", y[[:a]])
 y = [3,0,0]
-julia> println("x*y = ",scalar(x*y))
+julia> println("x*y = ",scalar(x*y))  # scalar() extract the single entry of a zero-dimensional tensor
 x*y = 3
 ```
  - Vector outer product.
@@ -129,20 +129,25 @@ julia> println("Y = \n", Y[[:a],[:b]])
 Y = 
 [0 0 1
  2 5 4]
-julia> println("X*Y = ", (X*Y)[])
+julia> println("X*Y = ", scalar(X*Y))  # scalar() extract the single entry of a zero-dimensional tensor
 X*Y = 32
 ```
 
-The above definition of the mode product involved a little white lie as it suggested that the mode product `x*y` runs over all common modes of `x` and `y`. The actual truth is that a mode `k` of `x` is contracted with a mode `l` of `y` if the predicate `multiplies(k,l)` returns `true`. In most cases, contracting equal modes is the behaviour you want, therefore the default definition is `multiplies(k,l) = (k == l)`. There are situations, however, where different rules are more suitable. 
+The above definition of the mode product involved a little white lie as it suggested that the mode product `x*y` always runs over all common modes of `x` and `y`. The actual truth is that a mode `k` of `x` is contracted with a mode `l` of `y` if the predicate `multiplies(k,l)` returns `true`. In most cases, contracting equal modes is the behaviour you want, therefore the default definition is `multiplies(k,l) = (k == l)`. There are situations, however, where different rules are more suitable. 
 
 The particular situation we have in mind are linear operators `A` from a tensor space with mode set `D` onto itself. These operators are naturally tensors with two modes for each mode `k in D`, namely one which is to be contracted with the input and one delivering the mode for the output. In the notation of this package, we distinguish these modes by *tagging* them with a `:C` (for column) or `:R` (for row) tag, respectively. Given a mode symbol `k`, this is done by writing `tag(:C,k)` which wraps `k` in a `Tag{:C}` object. 
 ```julia
-immutable Tag{L} mlabel::Any end
-tag(L,k) = Tag{L}(k)
+immutable Tag{T} mlabel::Any end
+tag(T,k) = Tag{T}(k)
 ```
-For convenience, the `tag()` function is overloaded to work on both `Mode` objects as well as `Vector{Any}` and `Vector{Mode}`. 
+For convenience, the `tag()` function is overloaded to also work on `Mode` objects as well as `Vector{Any}` and `Vector{Mode}`. 
+```julia
+tag(T,k::Mode) = Mode(tag(T,mlabel(k)),msize(k))
+tag(T,K::AbstractVector) = Any[tag(T,k) for k in K]
+tag(T,K::AbstractVector{Mode}) = Mode[tag(T,k) for k in K]
+```
 
-The natural rules for matching row and column modes in the mode product are different from the above default. We would like the expression `A*x` to indicate the application of an operator `A` to a tensor `x`, i.e. the column modes of `A` should be multiplied with the corresponding mode of `x` despite the fact that they do not have equal mode labels. Similarly, we want to allow chaining of operators as in `A*B` and right-sided application to vectors as in `x*A`. We thus add the following methods to `multiplies`.
+The natural rules for matching row and column modes in the mode product are different from the above default. We would like the expression `A*x` to denote the application of an operator `A` to a tensor `x`, i.e. the column modes of `A` should be multiplied with the corresponding mode of `x` despite the fact that they do not have equal mode labels. Similarly, we want to allow chaining of operators as in `A*B` and right-sided application to vectors as in `x*A`. We thus add the following methods to `multiplies`.
 ```julia
 multiplies(k::Tag{:C}, l::Tag{:R}) = multiplies(k.mlabel, l.mlabel)
 multiplies(k::Any    , l::Tag{:R}) = multiplies(k       , l.mlabel)
@@ -193,7 +198,7 @@ v[M,[k]] = V[:,1:r]
 
 The following generators for `rfunc` are provided:
  - `fixed(r) = (S) -> r`.
- - `maxrank() = (s) -> length(s)`.
+ - `maxrank() = (S) -> length(S)`.
  - `adaptive(eps; rel = true) = (S) -> [ smallest r such that norm(S[r+1:end])/(rel ? norm(S) : 1) <= eps ]`. 
 
 
@@ -232,7 +237,7 @@ xx = core; for f in values(factors) xx *= f; end
 julia> norm(x - xx)/norm(x)
 0.49961117095943813
 ```
-Monitor ranks.
+Display ranks.
 ```julia
 julia> for k = 1:10 println(k, " => ", msize(core,tag(:Rank,k))); end
 1 => 3
@@ -285,7 +290,7 @@ Reassemble the tensor and check accuracy.
 julia> norm(x - prod(tt))/norm(x)
 0.4995203414908285
 ```
-Monitor ranks.
+Display ranks.
 ```julia
 julia>  println([msize(tt[k], tag(:Rank,k)) for k in 1:9])
 [1,1,1,1,1,1,14,8,3]
@@ -293,7 +298,7 @@ julia>  println([msize(tt[k], tag(:Rank,k)) for k in 1:9])
 
 ### Cyclic vs. Tree Structured Tensor Networks
 
-It is known that tensor network formats based on cyclic graphs are in general not closed (see <http://arxiv.org/abs/1105.4449>) and therefore appear to be unsuitable for numerical computations. An immediate follow-up question is whether there is any reason to consider cyclic graphs at all, i.e. whether there are tensors which can be represented more efficiently in cyclic rather than tree-based formats. We next construct a three-dimensional tensor and verify numerically that it can be compressed more efficiently on a triangle than a tree. 
+It is known that tensor network formats based on cyclic graphs are in general not closed (see <http://arxiv.org/abs/1105.4449>) and therefore appear to be unsuitable for numerical computations. In order to assess the gravity of this result, it would be useful to know whether cyclic tensor networks are more powerful tree-shaped ones, i.e. whether there are tensors which can be represented more efficiently in cyclic rather than tree-based formats. In the following, we give a positive answer to this question by constructing a three-dimensional tensor and verifying numerically that it can be compressed more efficiently on a triangle than a tree. 
 
 The construction is fairly simple: take a triangle, set all ranks equal to `r` and fill the vertex tensors with random entries. 
 ```julia
@@ -320,7 +325,7 @@ Converting this tensor to a tree requires separating single modes. We expect the
     for r12 = 1:r, r13 = 1:r
 ]
 ``` 
-(not obvious). The second part is easily investigated numerically. 
+(expected but not obvious). The second part is easily investigated numerically. 
 ```julia
 conjecture_valid = true
 for r = 1:10
