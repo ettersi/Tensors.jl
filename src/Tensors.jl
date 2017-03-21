@@ -36,6 +36,7 @@ type Tensor{T}
     modes::Vector{Mode}
     data::Vector{T}
 end
+Tensor{T}(mlabel::AbstractVector, x::AbstractArray{T}) = Tensor([Mode(k,n) for (k,n) in zip(mlabel,size(x))], vec(x))
 
 
 # Output formatting
