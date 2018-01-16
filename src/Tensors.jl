@@ -43,7 +43,7 @@ Tensor{T}(mlabel::AbstractVector, x::AbstractArray{T}) = Tensor([Mode(k,n) for (
 
 Base.show(io::IO, k::Mode   ) = (print(io,"Mode("); show(io,mlabel(k)); print(io,",",msize(k),")"))
 Base.show{T}(io::IO, k::Tag{T}) = (print(io, T,"("); show(io,k.mlabel); print(io,")"))
-Base.show(io::IO, k::Virtual) = (print(io,"Virtual("); show(io,k.mlabel); print(io,",",k.scale")"))
+Base.show(io::IO, k::Virtual) = (print(io,"Virtual("); show(io,k.mlabel); print(io,",",k.scale,")"))
 Base.show(io::IO, t::Tensor ) = print(io,"Tensor{",eltype(t),"}([",join(map(string, mode(t)), ", "),"])")
 
 
@@ -174,7 +174,7 @@ Base.copy(t::Tensor) = Tensor(copy(t.modes), copy(t.data))
 Base.convert{T}(::Type{Tensor{T}}, t::Tensor) = Tensor(t.modes, convert(Vector{T}, t.data))
 
 export scalar
-function scalar(t::Tensor) 
+function scalar(t::Tensor)
     @assert ndims(t) == 0
     return t.data[1]
 end
@@ -185,7 +185,7 @@ end
 function linearindex(D::AbstractVector{Mode}, i::Index)
     n = 1; j = 0
     for k in D
-        if !( 1 <= i[mlabel(k)] <= msize(k)) 
+        if !( 1 <= i[mlabel(k)] <= msize(k))
             throw(BoundsError(k,i[mlabel(k)]))
         end
         j = j + n*(i[mlabel(k)]-1)
@@ -206,11 +206,11 @@ index(D::AbstractVector{Mode}) = IndexSet(D)
 index(t::Tensor) = index(mode(t))
 
 Base.start(idx::IndexSet) = Index(map(m -> (mlabel(m),1), idx.D))
-function Base.next(idx::IndexSet, i) 
+function Base.next(idx::IndexSet, i)
     ip = copy(i)
     done = true
     for k in idx.D
-        if ip[mlabel(k)] < msize(k) 
+        if ip[mlabel(k)] < msize(k)
             ip[mlabel(k)] += 1
             done = false
             break
@@ -259,7 +259,7 @@ function permutedimsI!(t::Tensor, perm::AbstractVector{Int})
         data = similar(t.data)
         t.data = vec(TensorOperations.add!(
             one(scalartype(t)), reshape(t.data,size(t)...), Val{:N},
-            zero(scalartype(t)), similar(t.data, size(t)[perm]...), 
+            zero(scalartype(t)), similar(t.data, size(t)[perm]...),
             perm
         ))
         t.modes = t.modes[perm]
@@ -281,9 +281,9 @@ end
 
 export splitm, splitm!
 splitm(t::Tensor, s#=::Dict{Any,Vector{Mode}}=#) = splitm!(copy(t),s)
-function splitm!(t::Tensor, s#=::Dict{Any,Vector{Mode}}=#) 
+function splitm!(t::Tensor, s#=::Dict{Any,Vector{Mode}}=#)
     for k in mode(t)
-        if msize(k) != msize(s[mlabel(k)]) 
+        if msize(k) != msize(s[mlabel(k)])
             throw(ArgumentError("Invalid splitting for mode ", mlabel(k), "! (", msize(k), " != ", join("*",[msize(kk) for kk in s[mlabel(k)]]),")"))
         end
     end
@@ -293,7 +293,7 @@ end
 
 export mergem, mergem!
 mergem(t::Tensor, m#=::Dict{Vector, Any}=#) = mergem!(copy(t),m)
-function mergem!(t::Tensor, m#=::Dict{Vector, Any}=#) 
+function mergem!(t::Tensor, m#=::Dict{Vector, Any}=#)
     K = vcat([K for K in keys(m)]...)
     DmK = setdiff(mlabel(t),K)
     permutedims!(t, vcat(K, DmK))
@@ -354,7 +354,7 @@ function padcat(x::Tensor, y::Tensor, extendmodes)
         [k in extendmodes for k in mlabel(x)]
     )
     return Tensor(
-        [Mode(k,n) for (k,n) in zip(mlabel(x), size(zdata))], 
+        [Mode(k,n) for (k,n) in zip(mlabel(x), size(zdata))],
         vec(zdata)
     )
 end
@@ -395,7 +395,7 @@ import Base: *, /
 *(t::Tensor, a::Number) = a*t
 /(t::Tensor, a::Number) = Tensor(copy(t.modes), t.data/a)
 
-function Base.dot(t1::Tensor,t2::Tensor) 
+function Base.dot(t1::Tensor,t2::Tensor)
     permutedims!(t2, mlabel(t1))
     return dot(t1.data, t2.data)
 end
@@ -492,7 +492,7 @@ end
         @nexprs $N d->(stride_{d+1} = stride_d*size(A, d))
         $(Symbol(:offset_, N)) = 1
         $(Symbol(:b_, N)) = 1
-        
+
         @nloops $N i A d->(
             offset_{d-1} = offset_d + (i_d-1)*stride_d;
             b_{d-1} = b[d][i_d]*b_d
@@ -508,8 +508,8 @@ function splitAb(t::Tensor...)
     i = max(findfirst(t -> ndims(t) > 1, t), 1)
     A = t[i]
     b = [
-        (j = findfirst(t -> multiplies(mlabel(t)[1], mlabel(k)), t[1:i-1])) > 0 ? t[j].data : 
-            (j = findfirst(t -> multiplies(mlabel(k), mlabel(t)[1]), t[i+1:end])) > 0 ? t[i+j].data : 
+        (j = findfirst(t -> multiplies(mlabel(t)[1], mlabel(k)), t[1:i-1])) > 0 ? t[j].data :
+            (j = findfirst(t -> multiplies(mlabel(k), mlabel(t)[1]), t[i+1:end])) > 0 ? t[i+j].data :
                 ones(msize(k))
         for k in mode(A)
     ]
@@ -531,18 +531,18 @@ end
 
 # QR decomposition
 
-function Base.qr(t::Tensor, k::Any, r = maxrank(t,k)) 
+function Base.qr(t::Tensor, k::Any, r = maxrank(t,k))
     Dmk = setdiff(mlabel(t),[k])
     F = qrfact(t[Dmk,k])
     kk = Mode(k,r)
-    return Tensor([mode(t,Dmk);kk], vec(F[:Q]*eye(eltype(t), msize(t,Dmk),r))), 
+    return Tensor([mode(t,Dmk);kk], vec(F[:Q]*eye(eltype(t), msize(t,Dmk),r))),
            Tensor([tag(:R,kk),tag(:C,mode(t,k))], vec(F[:R][1:r,:]))
 end
 function Base.qr(t::Tensor, K::AbstractVector, k::Any, r = maxrank(t,K))
     DmK = setdiff(mlabel(t),K)
     F = qrfact(t[DmK,K])
     k = Mode(k,r)
-    return Tensor([mode(t,DmK);k], vec(F[:Q]*eye(eltype(t), msize(t,DmK),r))), 
+    return Tensor([mode(t,DmK);k], vec(F[:Q]*eye(eltype(t), msize(t,DmK),r))),
            Tensor([k;mode(t,K)], vec(F[:R][1:r,:]))
 end
 
@@ -553,16 +553,16 @@ function Base.svd(t::Tensor, k::Any, rank = maxrank())
     Kc = setdiff(mlabel(t), [k])
     F = svdfact(t[Kc,k])
     kk = Mode(k, rank(F[:S]))
-    return Tensor([mode(t,Kc); kk], vec(F[:U][:,1:msize(kk)])), 
-           Tensor([kk], F[:S][1:msize(kk)]), 
+    return Tensor([mode(t,Kc); kk], vec(F[:U][:,1:msize(kk)])),
+           Tensor([kk], F[:S][1:msize(kk)]),
            Tensor([tag(:R,kk);tag(:C,mode(t,k))], vec(F[:Vt][1:msize(kk), :]))
 end
 function Base.svd(t::Tensor, K::AbstractVector, k::Any, rank = maxrank())
     Kc = setdiff(mlabel(t), K)
     F = svdfact(t[Kc,K])
     k = Mode(k, rank(F[:S]))
-    return Tensor([mode(t,Kc); k], vec(F[:U][:,1:msize(k)])), 
-           Tensor([k], F[:S][1:msize(k)]), 
+    return Tensor([mode(t,Kc); k], vec(F[:U][:,1:msize(k)])),
+           Tensor([k], F[:S][1:msize(k)]),
            Tensor([k;mode(t,K)], vec(F[:Vt][1:msize(k), :]))
 end
 
@@ -579,13 +579,13 @@ maxrank() = (s) -> length(s)
 
 # Determine perm such that after == before[perm]
 function findpermutation(before, after)
-    if length(before) != length(after) 
+    if length(before) != length(after)
         throw(ArgumentError("The number of modes must be preserved during permutation!"))
     end
 
     perm = Array(Int,length(after))
     for i in 1:length(after)
-        perm[i] = findfirst(before, after[i]) 
+        perm[i] = findfirst(before, after[i])
         if perm[i] == 0
             throw(ArgumentError("Could not find mode $(k)!"))
         end
