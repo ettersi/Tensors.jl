@@ -29,7 +29,7 @@ immutable Virtual{T}
 end
 
 export Index
-typealias Index Dict{Any,Int}
+const Index = Dict{Any,Int}
 
 export Tensor
 type Tensor{T}
@@ -172,6 +172,12 @@ msize(t::Tensor) = size(t)
 msize(t::Tensor, k) = msize(mode(t,k))
 Base.copy(t::Tensor) = Tensor(copy(t.modes), copy(t.data))
 Base.convert{T}(::Type{Tensor{T}}, t::Tensor) = Tensor(t.modes, convert(Vector{T}, t.data))
+
+Base.isapprox(
+    x::Tensor,y::Tensor,
+    rtol::Real=Base.rtoldefault(scalartype(x),scalartype(y)),
+    atol::Real=0
+) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
 
 export scalar
 function scalar(t::Tensor)
@@ -430,22 +436,25 @@ end
 
 # Binary elementwise arithmetic
 
-for f in (:.*,:./)
-    @eval begin
-        Base.$f(t1::Tensor, t2::Tensor) = Tensor(copy(t1.modes), $f(t1.data, t2[mlabel(t1)]))
-        Base.$f(a::Number, t::Tensor) = Tensor(copy(t.modes), $f(a, t.data))
-        Base.$f(t::Tensor, a::Number) = Tensor(copy(t.modes), $f(t.data, a))
-    end
-end
+# Unsupported for the time being, as overloading broadcast(!) correctly is complicated
+# and it is not clear how much this functionality is used.
+
+# for f in (:.*,:./)
+#     @eval begin
+#         Base.$f(t1::Tensor, t2::Tensor) = Tensor(copy(t1.modes), $f(t1.data, t2[mlabel(t1)]))
+#         Base.$f(a::Number, t::Tensor) = Tensor(copy(t.modes), $f(a, t.data))
+#         Base.$f(t::Tensor, a::Number) = Tensor(copy(t.modes), $f(t.data, a))
+#     end
+# end
 
 
 # Mode product
 
 function matchmodes(M1::AbstractVector{Mode},M2::AbstractVector{Mode})
     deleteindex! = (v::Vector, i) -> (v[i] = v[end]; pop!(v))
-    M = Array(Mode,0)
-    K1 = Array(Mode,0)
-    K2 = Array(Mode,0)
+    M = Array{Mode}(0)
+    K1 = Array{Mode}(0)
+    K2 = Array{Mode}(0)
     N = copy(M2)
     for m1 in M1
         i2 = findfirst(m2->multiplies(mlabel(m1),mlabel(m2)), N)
@@ -521,7 +530,8 @@ function Base.scale!(t::Tensor...)
     _scale_inplace!(reshape(A.data, size(A)...), b...)
     return A
 end
-function Base.scale(t::Tensor...)
+export scale
+function scale(t::Tensor...)
     A,b = splitAb(t...)
     R = Tensor(copy(A.modes), Array{eltype(A)}(length(A)))
     _scale!(reshape(R.data, size(A)...), reshape(A.data, size(A)...), b...)
@@ -583,7 +593,7 @@ function findpermutation(before, after)
         throw(ArgumentError("The number of modes must be preserved during permutation!"))
     end
 
-    perm = Array(Int,length(after))
+    perm = Array{Int}(length(after))
     for i in 1:length(after)
         perm[i] = findfirst(before, after[i])
         if perm[i] == 0
